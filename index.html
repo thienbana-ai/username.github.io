@@ -1,0 +1,767 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Bốc số & Chia bảng thi đấu (v7 full)</title>
+  <style>
+    :root{font-family:system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial}
+    body{max-width:1200px;margin:18px auto;padding:18px;background:#ffffff;color:#111}
+    .card{background:#fff;padding:12px;border-radius:10px;border:1px solid #eef2f8;margin-bottom:12px}
+    input,select,button,textarea{font-size:14px;padding:8px;border-radius:8px;border:1px solid #e6e9f2}
+    input[type=number]{width:64px}
+    button{cursor:pointer}
+    .row{display:flex;gap:12px;flex-wrap:wrap}
+    .col{flex:1;min-width:260px}
+    .list{max-height:320px;overflow:auto;margin-top:8px}
+    .person{display:flex;align-items:center;justify-content:space-between;padding:8px;border-radius:8px;border:1px dashed #eef2fb;margin-bottom:6px}
+    .btn{padding:8px 12px;border-radius:8px;border:0;background:#2b6ef6;color:#fff}
+    .btn-secondary{background:#eef4ff;color:#2b3a7a;border:1px solid #dfe9ff}
+    .btn-danger{background:#f44336;color:#fff}
+    .spinner{display:inline-block;padding:10px 14px;border-radius:8px;background:linear-gradient(180deg,#fff,#f4f7ff);text-align:center;font-weight:700}
+    table{width:100%;border-collapse:collapse}
+    td,th{padding:6px;border:1px solid #eef2fb;text-align:left}
+    .group-grid{display:flex;gap:8px;flex-wrap:wrap}
+    .group{flex:1;min-width:260px;background:#fff;padding:8px;border-radius:8px;border:1px solid #eef2fb}
+    .secret{font-family:monospace;background:#111;color:#fff;padding:4px 6px;border-radius:6px}
+    .top2{background:#f0fff0}
+    .progress{font-weight:600;margin-top:8px}
+    footer{font-size:12px;opacity:.8}
+    .muted{color:#666;font-size:13px}
+    .selected { outline: 2px solid #2b6ef6; background: #f1f7ff; }
+    .controls { display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-top:8px; }
+    .small { padding:6px 8px; font-size:13px; }
+  </style>
+</head>
+<body>
+
+  <div class="card row">
+    <div class="col">
+      <h3>1) Thêm hạt giống / người quay</h3>
+      <div style="display:flex;gap:8px;align-items:center">
+        <input id="newName" placeholder="Tên người / hạt giống" />
+        <select id="typeSelect"><option value="participant">Người quay</option><option value="seed">Hạt giống (seed)</option></select>
+        <button class="btn" id="btnAdd">Thêm</button>
+      </div>
+
+      <div style="display:flex;gap:12px;margin-top:10px">
+        <div style="flex:1">
+          <h4>Hạt giống (Seeds)</h4>
+          <div class="list" id="seedList"></div>
+        </div>
+        <div style="flex:1">
+          <h4>Người quay (Participants)</h4>
+          <div class="list" id="participantList"></div>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:8px;margin-top:8px;align-items:center">
+        <button class="btn-secondary" id="btnAutoAssign">Gán số ô cho seed (1..N)</button>
+        <button class="btn-secondary" id="btnShuffleSeeds">Xáo seed</button>
+        <label style="margin-left:12px">Số đội tối đa mỗi bảng: <input id="maxPerGroup" type="number" min="1" value="4" style="width:80px;margin-left:6px" /></label>
+      </div>
+
+      <div style="margin-top:8px">Số ô hiện tại: <strong id="slotCount">0</strong></div>
+    </div>
+
+    <div class="col">
+      <h3>2) Quay / Bốc số (2s)</h3>
+      <div class="card">
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <select id="selectParticipant"><option value="">-- chọn người --</option></select>
+          <button class="btn" id="btnSpin">Quay (2s)</button>
+          <button class="btn-secondary" id="btnSpinAll">Quay tự động tất cả</button>
+          <label style="margin-left:auto" class="muted">Hiệu ứng: <strong>2s</strong></label>
+        </div>
+
+        <div style="margin-top:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+          <div class="spinner" id="spinResult">-</div>
+          <div style="flex:1">
+            <div><strong>Số đã được bốc:</strong></div>
+            <div id="assignedMap"></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top:8px">
+        <h4>Các cặp đã tạo (chọn 1 cặp để dùng nút Gán/Quay bảng)</h4>
+        <div id="pairsList" class="list"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>3) Phân bảng & Vòng bảng (1 lượt)</h3>
+
+    <div class="controls">
+      <label>Số bảng: <input id="groupCount" type="number" min="1" value="5" style="width:70px" /></label>
+      <select id="groupMode"><option value="seeded">Gán theo hạt giống</option><option value="roundrobin">Đánh vòng tròn (1 lượt)</option><option value="random">Ngẫu nhiên</option></select>
+      <button class="btn" id="btnCreateGroups">Tạo bảng (gán seed A,B,C...)</button>
+
+      <!-- Global assign / spin for selected pair -->
+      <button class="btn-secondary small" id="btnAssignSelected">Gán bảng (chọn cặp trước)</button>
+      <button class="btn small" id="btnSpinSelected">Quay bảng (chọn cặp trước)</button>
+
+      <!-- Automatic group assign (for unassigned teams) -->
+      <div style="display:flex;gap:6px;align-items:center">
+        <button class="btn" id="btnSpinAssignGroup">Quay gán bảng (tự động gán đội chưa bảng)</button>
+        <div class="progress" id="assignProgress" style="margin-top:6px"></div>
+      </div>
+
+      <button class="btn-secondary" id="btnAssignGroups">Gán tất cả (theo thứ tự hạt giống: 1→A,2→B,...)</button>
+      <button class="btn-secondary" id="btnGenerateRR">Sinh lịch vòng tròn</button>
+      <button class="btn-secondary" id="btnRecalc">Tính lại bảng xếp hạng</button>
+      <button class="btn-secondary" id="btnExport">Xuất Excel (CSV)</button>
+    </div>
+
+    <div id="groupsArea" style="margin-top:12px"></div>
+    <div id="bracketArea" style="margin-top:12px"></div>
+  </div>
+
+  <div class="card">
+    <h3>4) Reset & Mật khẩu</h3>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <div>Admin password hiện tại: <span class="secret" id="adminPass">1234</span></div>
+      <button class="btn-secondary" id="btnChangePass">Đổi mật khẩu</button>
+    </div>
+    <div style="margin-top:8px;display:flex;gap:8px;align-items:center">
+      <input id="resetPwdInput" placeholder="Nhập mật khẩu để reset" />
+      <button class="btn-danger" id="btnReset">Reset toàn bộ (xóa kết quả, giữ cặp)</button>
+    </div>
+    <div style="margin-top:8px" class="muted">Ghi chú: Cặp đấu cố định sau khi quay. Muốn quay lại cặp mới, xóa state trong console.</div>
+  </div>
+
+  <footer style="margin-top:8px" class="muted">Mở file HTML trực tiếp bằng trình duyệt. Nếu cần .xlsx chính thức, mình bổ sung.</footer>
+
+<script>
+(function(){
+  // State
+  const defaultPass = '1234';
+  const STATE_KEY = 'bocso_v6_state_assign_priority';
+  const state = {
+    seeds: [], // {id,name,number}
+    participants: [], // {id,name,spun}
+    assignedNumbers: {}, // number->participantId
+    pairs: [], // {id,participantId,seedId,number,group,slot}
+    groups: {}, // groupName -> [pairId]
+    matches: {}, // group -> [ {id,aPairId,bPairId,scoreA,scoreB,result} ]
+    standings: {},
+    bracket: null,
+    adminPass: defaultPass,
+    pairsLocked: false
+  };
+
+  let selectedPairId = null;
+
+  // Utilities
+  const uid = (p='id') => p + '_' + Math.random().toString(36).slice(2,9);
+  const el = id => document.getElementById(id);
+  function saveState(){ try{ localStorage.setItem(STATE_KEY, JSON.stringify(state)); }catch(e){ console.warn('saveState err',e); } }
+  function loadState(){ try{ const s=localStorage.getItem(STATE_KEY); if(s){ const parsed=JSON.parse(s); Object.assign(state, parsed); } }catch(e){ console.warn('loadState err',e); } }
+  function showAdminPass(){ if(el('adminPass')) el('adminPass').textContent = state.adminPass || defaultPass; }
+
+  // Render
+  function renderSeedList(){
+    const box = el('seedList'); box.innerHTML='';
+    state.seeds.forEach(s=>{
+      const d=document.createElement('div'); d.className='person';
+      d.innerHTML = `<div>${s.number?`[#${s.number}] `:''}${escapeHtml(s.name)}</div>
+        <div style="display:flex;gap:6px">
+          <button data-id="${s.id}" class="btn-secondary btnEditSeed">Sửa</button>
+          <button data-id="${s.id}" class="btn-secondary btnRemoveSeed">X</button>
+        </div>`;
+      box.appendChild(d);
+    });
+    el('slotCount').textContent = state.seeds.length;
+  }
+
+  function renderParticipantList(){
+    const box = el('participantList'); box.innerHTML='';
+    const sel = el('selectParticipant'); sel.innerHTML = '<option value="">-- chọn người --</option>';
+    state.participants.forEach(p=>{
+      const d=document.createElement('div'); d.className='person';
+      d.innerHTML = `<div>${escapeHtml(p.name)} ${p.spun?`(số: ${p.spun})`:''}</div>
+        <div style="display:flex;gap:6px">
+          <button data-id="${p.id}" class="btn btnEditP">Sửa</button>
+          <button data-id="${p.id}" class="btn-secondary btnRemoveP">X</button>
+        </div>`;
+      box.appendChild(d);
+      const opt = document.createElement('option'); opt.value=p.id; opt.textContent=p.name; sel.appendChild(opt);
+    });
+  }
+
+  function renderAssignedMap(){
+    const dom = el('assignedMap'); dom.innerHTML='';
+    const table = document.createElement('table');
+    const header = document.createElement('tr'); header.innerHTML = '<th>Số</th><th>Người</th><th>Seed</th>';
+    table.appendChild(header);
+    const numbers = Object.keys(state.assignedNumbers).map(n=>Number(n)).sort((a,b)=>a-b);
+    numbers.forEach(n=>{
+      const pid = state.assignedNumbers[n];
+      const p = state.participants.find(x=>x.id===pid);
+      const seed = state.seeds.find(s=>Number(s.number)===Number(n));
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${n}</td><td>${p?p.name:'-'}</td><td>${seed?escapeHtml(seed.name):'-'}</td>`;
+      table.appendChild(tr);
+    });
+    dom.appendChild(table);
+  }
+
+  function renderPairs(){
+    const box = el('pairsList'); box.innerHTML='';
+    state.pairs.forEach(pair=>{
+      const p = state.participants.find(x=>x.id===pair.participantId);
+      const s = state.seeds.find(x=>x.id===pair.seedId);
+      const div=document.createElement('div'); div.className='person';
+      const leftText = `${p?p.name:'-'} ⟷ ${s?s.name:'-'}`;
+      const meta = `(ô ${pair.number}) ${pair.group? ' - Bảng '+pair.group : ''}${pair.slot? ' - Vị trí '+pair.slot : ''}`;
+      div.innerHTML = `<div class="pairLabel" data-id="${pair.id}" style="cursor:pointer">${escapeHtml(leftText)} ${meta}</div>
+        <div style="display:flex;gap:6px">
+          <button class="btn-secondary btnAssignGroupInline" data-id="${pair.id}">Gán bảng</button>
+          <button class="btn btnSpinPairInline" data-id="${pair.id}">Quay bảng</button>
+          <button class="btn-secondary btnRemovePair" data-id="${pair.id}">X</button>
+        </div>`;
+      if(selectedPairId === pair.id) div.classList.add('selected');
+      box.appendChild(div);
+    });
+  }
+
+  function renderGroups(){
+    const area = el('groupsArea'); area.innerHTML='';
+    const keys = Object.keys(state.groups||{});
+    if(keys.length===0){ area.textContent='Chưa có bảng.'; return; }
+    const container = document.createElement('div'); container.className='group-grid';
+    keys.forEach(k=>{
+      const g = document.createElement('div'); g.className='group card';
+      g.innerHTML = `<h4>Bảng ${escapeHtml(k)}</h4>`;
+      const list = state.groups[k]||[];
+      list.forEach(pid=>{
+        const pair = state.pairs.find(p=>p.id===pid); if(!pair) return;
+        const p = state.participants.find(x=>x.id===pair.participantId);
+        const s = state.seeds.find(x=>x.id===pair.seedId);
+        const row = document.createElement('div'); row.style.padding='6px 0';
+        row.textContent = `${p?p.name:'-'} ⟷ ${s?s.name:'-'} (ô ${pair.number})${pair.slot?` - Vị trí ${pair.slot}`:''}`;
+        g.appendChild(row);
+      });
+
+      if(state.matches && state.matches[k] && state.matches[k].length){
+        const tbl = document.createElement('table');
+        const hdr = document.createElement('tr'); hdr.innerHTML = '<th>Trận</th><th>Đội A</th><th></th><th>Đội B</th><th>Kết quả (Tỷ số)</th>';
+        tbl.appendChild(hdr);
+        state.matches[k].forEach((m, idx)=>{
+          const aPair = state.pairs.find(p=>p.id===m.aPairId);
+          const bPair = state.pairs.find(p=>p.id===m.bPairId);
+          const aName = aPair ? (state.participants.find(x=>x.id===aPair.participantId).name) : '-';
+          const bName = bPair ? (state.participants.find(x=>x.id===bPair.participantId).name) : '-';
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td>${idx+1}</td>
+            <td>${escapeHtml(aName)}</td>
+            <td style="width:140px">
+              <input type="number" min="0" class="scoreA match-input" data-group="${escapeAttr(k)}" data-match="${m.id}" value="${m.scoreA==null?'':m.scoreA}" /> - 
+              <input type="number" min="0" class="scoreB match-input" data-group="${escapeAttr(k)}" data-match="${m.id}" value="${m.scoreB==null?'':m.scoreB}" />
+            </td>
+            <td>${escapeHtml(bName)}</td>
+            <td class="match-result" id="res_${m.id}"></td>`;
+          tbl.appendChild(tr);
+        });
+        g.appendChild(tbl);
+      }
+
+      if(state.standings && state.standings[k]){
+        const st = state.standings[k].slice().sort((a,b)=>{
+          if(b.points!==a.points) return b.points - a.points;
+          const diffB = (b.goalsFor - b.goalsAgainst);
+          const diffA = (a.goalsFor - a.goalsAgainst);
+          if(diffB !== diffA) return diffB - diffA;
+          if(b.goalsFor !== a.goalsFor) return b.goalsFor - a.goalsFor;
+          return a.order - b.order;
+        });
+        const stTbl = document.createElement('table');
+        const hdr2 = document.createElement('tr'); hdr2.innerHTML = '<th>Đội</th><th>Trận</th><th>Thắng</th><th>Hòa</th><th>Thua</th><th>BT</th><th>BB</th><th>HS</th><th>Điểm</th>';
+        stTbl.appendChild(hdr2);
+        st.forEach((row,idx)=>{
+          const pair = state.pairs.find(p=>p.id===row.pairId);
+          const pname = pair ? state.participants.find(x=>x.id===pair.participantId).name : '';
+          const tr2 = document.createElement('tr');
+          tr2.innerHTML = `<td>${escapeHtml(pname)}${idx<2? ' ⭐':''}</td><td>${row.played}</td><td>${row.wins}</td><td>${row.draws}</td><td>${row.losses}</td><td>${row.goalsFor}</td><td>${row.goalsAgainst}</td><td>${row.goalsFor - row.goalsAgainst}</td><td>${row.points}</td>`;
+          if(idx<2) tr2.className='top2';
+          stTbl.appendChild(tr2);
+        });
+        g.appendChild(document.createElement('hr'));
+        g.appendChild(stTbl);
+      }
+
+      container.appendChild(g);
+    });
+    area.appendChild(container);
+  }
+
+  function renderBracket(){
+    const area = el('bracketArea'); area.innerHTML='';
+    if(!state.bracket) { area.textContent='Chưa có nhánh.'; return; }
+    state.bracket.forEach((r,i)=>{
+      const div = document.createElement('div'); div.className='card'; div.style.marginBottom='8px';
+      if(i===0){ div.innerHTML = `<strong>Vòng 1 (Teams)</strong><br>${r.map(x=>escapeHtml(x.name)).join(' | ')}`; }
+      else { div.innerHTML = `<strong>Round ${i}</strong><br>${r.map((m,idx)=> (m.left? (escapeHtml(m.left.name || m.left)) : '') + ' vs ' + (m.right? (escapeHtml(m.right.name || m.right)) : '') ).join('<br>')}`; }
+      area.appendChild(div);
+    });
+  }
+
+  function renderAll(){
+    renderSeedList();
+    renderParticipantList();
+    renderAssignedMap();
+    renderPairs();
+    renderGroups();
+    renderBracket();
+    showAdminPass();
+    attachMatchInputListeners();
+  }
+
+  // Core functions
+  function addSeed(name){ state.seeds.push({id:uid('seed'),name:name,number:null}); saveState(); renderAll(); }
+  function addParticipant(name){ state.participants.push({id:uid('p'),name:name,spun:null}); saveState(); renderAll(); }
+
+  function autoAssignNumbers(){ for(let i=0;i<state.seeds.length;i++) state.seeds[i].number = i+1; saveState(); renderAll(); }
+  function shuffleSeeds(){ for(let i=state.seeds.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [state.seeds[i],state.seeds[j]]=[state.seeds[j],state.seeds[i]]; } let anyNumber = state.seeds.some(s=>s.number); if(anyNumber) state.seeds.forEach((s,i)=>s.number=i+1); saveState(); renderAll(); }
+
+  function availableNumbers(){ const used = new Set(Object.keys(state.assignedNumbers).map(x=>Number(x))); const total = state.seeds.length; const avail=[]; for(let i=1;i<=total;i++) if(!used.has(i)) avail.push(i); return avail; }
+
+  function spinAnimateForPid(pid, callback){
+    const seedCount = state.seeds.length;
+    if(seedCount===0) { alert('Chưa có hạt giống / số ô để bốc.'); return; }
+    const avail = availableNumbers();
+    if(avail.length===0) { alert('Tất cả số đã được bốc.'); return; }
+    const chosen = avail[Math.floor(Math.random()*avail.length)];
+    const spinEl = el('spinResult');
+    const duration=2000; const start=Date.now();
+    const tick = ()=>{
+      const t = Date.now()-start;
+      if(t<duration){ const fake = Math.floor(Math.random()*seedCount)+1; spinEl.textContent = fake; requestAnimationFrame(tick); }
+      else {
+        spinEl.textContent = chosen;
+        state.assignedNumbers[chosen]=pid;
+        const p = state.participants.find(x=>x.id===pid); if(p) p.spun = chosen;
+        const seed = state.seeds.find(s=>Number(s.number)===Number(chosen));
+        if(seed){
+          const pair = {id:uid('pair'),participantId:pid,seedId:seed.id,number:chosen,group:null,slot:null};
+          state.pairs.push(pair);
+          state.pairsLocked = true;
+        }
+        saveState(); renderAll(); if(callback) callback();
+      }
+    };
+    requestAnimationFrame(tick);
+  }
+
+  async function spinAllSequential(){
+    for(const p of state.participants){
+      if(!p.spun){
+        await new Promise(r=>{ spinAnimateForPid(p.id, ()=>r()); });
+        await new Promise(r=>setTimeout(r,200));
+      }
+    }
+    if(state.pairs.length>0) state.pairsLocked = true;
+    saveState();
+  }
+
+  // Create groups using seeds order if desired
+  function createGroups(){
+    const count = Math.max(1, Number(el('groupCount').value)||1);
+    const groups = {};
+    for(let i=0;i<count;i++) groups[String.fromCharCode(65+i)] = [];
+    // assign seed-based pairs into groups (seed order)
+    for(let i=0;i<state.seeds.length;i++){
+      const g = String.fromCharCode(65 + (i % count));
+      const pair = state.pairs.find(p=>p.seedId===state.seeds[i].id);
+      if(pair){ pair.group = g; if(!groups[g].includes(pair.id)) groups[g].push(pair.id); }
+    }
+    state.groups = groups; saveState(); renderAll();
+  }
+
+  // NEW: Assign first round priority: pair sorted by seed number -> first N groups assigned A,B,C...
+  function assignPriorityBySeed(){
+    const count = Math.max(1, Number(el('groupCount').value)||1);
+    // prepare groups
+    const groups = {};
+    for(let i=0;i<count;i++) groups[String.fromCharCode(65+i)] = [];
+    // sort pairs by pair.number (seed number)
+    const sortedPairs = state.pairs.slice().sort((a,b)=>{
+      const na = Number(a.number||0), nb = Number(b.number||0);
+      return na - nb;
+    });
+    // assign first `count` pairs to A,B,C...
+    for(let i=0;i<sortedPairs.length;i++){
+      const pair = sortedPairs[i];
+      if(i < count){
+        const g = String.fromCharCode(65 + i);
+        pair.group = g;
+        groups[g].push(pair.id);
+      } else {
+        // unassign remaining - ensure they have no group
+        pair.group = null;
+      }
+      // clear slot so later spin can assign slots
+      pair.slot = null;
+    }
+    state.groups = groups;
+    // note: remaining pairs (i >= count) remain unassigned and will be handled by spinAssignGroups
+    saveState(); renderAll();
+  }
+
+  // spin-assign remaining teams into groups (respecting max per group) - will assign only unassigned pairs
+  async function spinAssignGroups(){
+    const maxPer = Math.max(1, Number(el('maxPerGroup').value)||4);
+    const unassigned = state.pairs.filter(p=>!p.group);
+    if(unassigned.length===0){ alert('Không có đội chưa gán bảng.'); return; }
+    el('assignProgress').textContent = 'Bắt đầu quay gán bảng...';
+    for(const pair of unassigned){
+      const keys = Object.keys(state.groups);
+      const candidates = keys.filter(k=> (state.groups[k]||[]).length < maxPer );
+      if(candidates.length===0){ el('assignProgress').textContent = 'Tất cả bảng đã đầy.'; break; }
+      await new Promise(r=>{
+        const spinEl = el('assignProgress');
+        const pname = (state.participants.find(x=>x.id===pair.participantId) || {}).name || '';
+        const start = Date.now(); const duration = 2000;
+        const tick = ()=>{
+          const t = Date.now()-start;
+          if(t<duration){ spinEl.textContent = `Đang quay gán: ${pname} ...`; requestAnimationFrame(tick); }
+          else {
+            const chosenGroup = candidates[Math.floor(Math.random()*candidates.length)];
+            pair.group = chosenGroup; state.groups[chosenGroup] = state.groups[chosenGroup] || []; state.groups[chosenGroup].push(pair.id);
+            saveState(); renderAll(); spinEl.textContent = `Kết quả: ${pname} → Bảng ${chosenGroup}`; r();
+          }
+        };
+        requestAnimationFrame(tick);
+      });
+      await new Promise(r=>setTimeout(r,300));
+    }
+    el('assignProgress').textContent = 'Hoàn tất phân bảng.';
+  }
+
+  // generate round robin & initial standings
+  function generateRoundRobin(){
+    state.matches = {}; state.standings = {};
+    for(const g in state.groups){
+      const pairIds = state.groups[g];
+      state.matches[g] = []; state.standings[g] = [];
+      pairIds.forEach((pid, idx)=>{ state.standings[g].push({ pairId: pid, points:0, played:0, wins:0, draws:0, losses:0, goalsFor:0, goalsAgainst:0, order: idx }); });
+      for(let i=0;i<pairIds.length;i++){
+        for(let j=i+1;j<pairIds.length;j++){
+          state.matches[g].push({ id: uid('m'), aPairId: pairIds[i], bPairId: pairIds[j], scoreA: null, scoreB: null, result: null });
+        }
+      }
+    }
+    saveState(); renderAll();
+  }
+
+  // compute standings from matches
+  function updateStandingsFromMatches(){
+    state.standings = state.standings || {};
+    for(const g in state.groups){
+      const pairIds = state.groups[g] || [];
+      state.standings[g] = pairIds.map((pid, idx)=>({ pairId: pid, points:0, played:0, wins:0, draws:0, losses:0, goalsFor:0, goalsAgainst:0, order: idx }));
+      const matches = state.matches[g] || [];
+      matches.forEach(m=>{
+        if(m.scoreA==null || m.scoreB==null) return;
+        const a = state.standings[g].find(r=>r.pairId===m.aPairId);
+        const b = state.standings[g].find(r=>r.pairId===m.bPairId);
+        if(!a||!b) return;
+        a.played++; b.played++;
+        a.goalsFor += Number(m.scoreA); a.goalsAgainst += Number(m.scoreB);
+        b.goalsFor += Number(m.scoreB); b.goalsAgainst += Number(m.scoreA);
+        if(m.scoreA>m.scoreB){ a.wins++; b.losses++; a.points += 3; m.result = 'A'; }
+        else if(m.scoreA<m.scoreB){ b.wins++; a.losses++; b.points += 3; m.result = 'B'; }
+        else { a.draws++; b.draws++; a.points += 1; b.points += 1; m.result = 'D'; }
+      });
+      state.standings[g].sort((x,y)=>{
+        if(y.points!==x.points) return y.points - x.points;
+        const diffY = (y.goalsFor - y.goalsAgainst), diffX = (x.goalsFor - x.goalsAgainst);
+        if(diffY !== diffX) return diffY - diffX;
+        if(y.goalsFor !== x.goalsFor) return y.goalsFor - x.goalsFor;
+        return x.order - y.order;
+      });
+    }
+    saveState(); renderAll();
+  }
+
+  // match input listeners
+  function attachMatchInputListeners(){
+    const inputs = document.querySelectorAll('.match-input');
+    inputs.forEach(inp=>{
+      if(inp._attached) return; inp._attached = true;
+      inp.addEventListener('input', function(){
+        const group = this.dataset.group; const matchId = this.dataset.match;
+        const m = (state.matches[group]||[]).find(x=>x.id===matchId); if(!m) return;
+        const row = this.closest('tr');
+        if(row){
+          const scAEl = row.querySelector('.scoreA'); const scBEl = row.querySelector('.scoreB');
+          const scA = scAEl && scAEl.value!=='' ? Number(scAEl.value) : null;
+          const scB = scBEl && scBEl.value!=='' ? Number(scBEl.value) : null;
+          m.scoreA = scA; m.scoreB = scB;
+          const resCell = el('res_'+m.id);
+          if(scA!==null && scB!==null){
+            if(resCell){
+              if(scA>scB) resCell.textContent = scA + ' - ' + scB + ' (A thắng)';
+              else if(scA<scB) resCell.textContent = scA + ' - ' + scB + ' (B thắng)';
+              else resCell.textContent = scA + ' - ' + scB + ' (Hòa)';
+            }
+          } else { if(resCell) resCell.textContent = ''; }
+        }
+        updateStandingsFromMatches();
+      });
+    });
+  }
+
+  // CSV export
+  function exportCSV(){
+    const rows = [];
+    rows.push(['--- Hạt giống (Seeds) ---']);
+    rows.push(['SeedID','SeedName','Number']);
+    state.seeds.forEach(s=> rows.push([s.id, s.name, s.number||'']));
+    rows.push([]);
+    rows.push(['--- Người quay (Participants) ---']);
+    rows.push(['PartID','Name','SpunNumber']);
+    state.participants.forEach(p=> rows.push([p.id, p.name, p.spun||'']));
+    rows.push([]);
+    rows.push(['--- Cặp đấu (Pairs) ---']);
+    rows.push(['PairID','Participant','Seed','Number','Group','Slot']);
+    state.pairs.forEach(pair=>{
+      const p = state.participants.find(x=>x.id===pair.participantId);
+      const s = state.seeds.find(x=>x.id===pair.seedId);
+      rows.push([pair.id, p?p.name:'', s?s.name:'', pair.number||'', pair.group||'', pair.slot||'']);
+    });
+    rows.push([]);
+    for(const g in state.groups){
+      rows.push([`--- Bảng ${g} ---`]);
+      rows.push(['PairID','Participant','Seed','Number','Slot']);
+      (state.groups[g]||[]).forEach(pid=>{
+        const pair = state.pairs.find(p=>p.id===pid); if(!pair) return;
+        const p = state.participants.find(x=>x.id===pair.participantId);
+        const s = state.seeds.find(x=>x.id===pair.seedId);
+        rows.push([pair.id, p?p.name:'', s?s.name:'', pair.number||'', pair.slot||'']);
+      });
+      rows.push([]);
+      rows.push(['Trận đấu','MatchID','Tỷ số']);
+      (state.matches[g]||[]).forEach(m=>{
+        const aPair = state.pairs.find(p=>p.id===m.aPairId);
+        const bPair = state.pairs.find(p=>p.id===m.bPairId);
+        const aName = aPair ? state.participants.find(x=>x.id===aPair.participantId).name : '';
+        const bName = bPair ? state.participants.find(x=>x.id===bPair.participantId).name : '';
+        const score = (m.scoreA==null || m.scoreB==null) ? '' : `${m.scoreA}-${m.scoreB}`;
+        rows.push([`Match`, m.id, `${aName} ${score} ${bName}`]);
+      });
+      rows.push([]);
+      rows.push(['BXH cuối bảng']);
+      rows.push(['PairID','Team','Played','Wins','Draws','Losses','GF','GA','GD','Points']);
+      (state.standings[g]||[]).forEach(r=>{
+        const pair = state.pairs.find(p=>p.id===r.pairId);
+        const p = pair ? state.participants.find(x=>x.id===pair.participantId) : null;
+        rows.push([r.pairId, p?p.name:'', r.played, r.wins, r.draws, r.losses, r.goalsFor, r.goalsAgainst, (r.goalsFor - r.goalsAgainst), r.points]);
+      });
+      rows.push([]);
+    }
+
+    const csv = rows.map(r => r.map(cell => {
+      const c = (cell===null || cell===undefined) ? '' : String(cell);
+      return `"${c.replace(/"/g,'""')}"`;
+    }).join(',')).join('\r\n');
+
+    const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a'); a.href = url; a.download = 'bocso_v6_results.csv';
+    document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+  }
+
+  // Inline assign one pair to group via prompt
+  function assignPairToGroup(pairId){
+    const group = prompt('Gán cặp vào bảng (ví dụ A,B,C):');
+    if(!group) return;
+    state.groups = state.groups || {}; state.groups[group] = state.groups[group] || [];
+    if(!state.groups[group].includes(pairId)) state.groups[group].push(pairId);
+    const pair = state.pairs.find(p=>p.id===pairId); if(pair) pair.group = group;
+    if(el('groupMode').value === 'roundrobin') generateRoundRobin();
+    saveState(); renderAll();
+  }
+
+  // NEW: Quay để chọn bảng A, B, C... và tự động gán cặp vào bảng được quay
+  function spinPair(pairId) {
+    const pair = state.pairs.find(p => p.id === pairId);
+    if (!pair) return alert('Cặp không tồn tại');
+
+    const maxPer = Math.max(1, Number(el('maxPerGroup').value) || 4);
+    const groups = Object.keys(state.groups || {});
+    if (groups.length === 0) return alert('Chưa tạo bảng. Vui lòng tạo bảng trước.');
+
+    const availableGroups = groups.filter(k => (state.groups[k] || []).length < maxPer);
+    if (availableGroups.length === 0) return alert('Tất cả các bảng đã đầy.');
+
+    const area = el('assignProgress');
+    const pname = (state.participants.find(x => x.id === pair.participantId) || {}).name || '';
+    const duration = 2000; const start = Date.now();
+
+    function tick() {
+      const t = Date.now() - start;
+      if (t < duration) {
+        const fake = groups[Math.floor(Math.random() * groups.length)];
+        area.textContent = `🎲 Đang quay bảng cho ${pname}... → ${fake}`;
+        requestAnimationFrame(tick);
+      } else {
+        // chọn bảng ngẫu nhiên trong các bảng còn chỗ
+        const chosenGroup = availableGroups[Math.floor(Math.random() * availableGroups.length)];
+        pair.group = chosenGroup;
+        state.groups[chosenGroup] = state.groups[chosenGroup] || [];
+        if(!state.groups[chosenGroup].includes(pair.id)) state.groups[chosenGroup].push(pair.id);
+        saveState(); renderAll();
+        area.textContent = `✅ Kết quả: ${pname} → Bảng ${chosenGroup}`;
+        if(el('groupMode').value === 'roundrobin') generateRoundRobin();
+      }
+    }
+
+    requestAnimationFrame(tick);
+  }
+
+  // spin single pair slot within its group (legacy) - still available but not used for "quay bảng"
+  function spinPairSlot(pairId){
+    const pair = state.pairs.find(p=>p.id===pairId); if(!pair) return alert('Cặp không tồn tại');
+    if(!pair.group) return alert('Cặp chưa có bảng. Gán bảng trước.');
+    const pairIds = state.groups[pair.group] || [pairId];
+    const slotCount = pairIds.length; const used = new Set();
+    pairIds.forEach(pid=>{ const pr = state.pairs.find(x=>x.id===pid); if(pr && pr.slot) used.add(pr.slot); });
+    const avail=[]; for(let i=1;i<=slotCount;i++) if(!used.has(i)) avail.push(i);
+    if(avail.length===0) return alert('Không còn vị trí trống trong bảng.');
+    const chosen = avail[Math.floor(Math.random()*avail.length)];
+    const area = el('assignProgress'); area.textContent = 'Đang quay vị trí bảng...';
+    setTimeout(()=>{ area.textContent = `Bảng ${pair.group} - Vị trí ${chosen}`; pair.slot = chosen; saveState(); renderAll(); }, 2000);
+  }
+
+  function removePair(pairId){
+    state.pairs = state.pairs.filter(p=>p.id!==pairId);
+    for(const g in state.groups) state.groups[g] = state.groups[g].filter(x=>x!==pairId);
+    for(const g in state.matches) state.matches[g] = state.matches[g].filter(m=> m.aPairId!==pairId && m.bPairId!==pairId);
+    if(selectedPairId === pairId) selectedPairId = null;
+    saveState(); renderAll();
+  }
+
+  function resetAllWithPwd(inputPwd){
+    if(inputPwd !== state.adminPass) return alert('Mật khẩu sai.');
+    if(!confirm('Bạn có chắc muốn reset toàn bộ dữ liệu (chỉ xóa kết quả, giữ cặp)?')) return;
+    state.assignedNumbers = {};
+    state.groups = {}; state.matches = {}; state.standings = {}; state.bracket = null;
+    state.pairsLocked = true;
+    saveState(); renderAll();
+  }
+
+  function changePassword(){
+    const cur = prompt('Nhập mật khẩu hiện tại:');
+    if(cur !== state.adminPass) return alert('Mật khẩu hiện tại sai.');
+    const nw = prompt('Nhập mật khẩu mới:');
+    if(!nw) return alert('Mật khẩu không hợp lệ.');
+    state.adminPass = nw; saveState(); showAdminPass();
+  }
+
+  function generateBracketFromTop2(){
+    const teams = [];
+    for(const g in state.standings){
+      const s = state.standings[g] || [];
+      if(s.length>=1) teams.push(state.pairs.find(p=>p.id===s[0].pairId));
+      if(s.length>=2) teams.push(state.pairs.find(p=>p.id===s[1].pairId));
+    }
+    const names = teams.map(pair=>{
+      const p = pair ? state.participants.find(x=>x.id===pair.participantId) : null;
+      const s = pair ? state.seeds.find(x=>x.id===pair.seedId) : null;
+      return pair ? `${p?p.name:'-'} ⟷ ${s?s.name:'-'}` : 'BYE';
+    });
+    if(names.length < 2) return alert('Không đủ đội để tạo nhánh.');
+    const pow2 = 2**Math.ceil(Math.log2(names.length));
+    while(names.length < pow2) names.push('BYE');
+    const rounds=[]; rounds.push(names.map(n=>({name:n})));
+    let cur = names.map(n=>({name:n}));
+    while(cur.length>1){
+      const next=[];
+      for(let i=0;i<cur.length;i+=2) next.push({left:cur[i], right:cur[i+1], winner:null});
+      rounds.push(next);
+      cur = next.map((m,idx)=>({name:`W${idx+1}`}));
+    }
+    state.bracket = rounds; saveState(); renderAll();
+  }
+
+  // Helpers
+  function escapeHtml(s){ if(!s && s!==0) return ''; return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  function escapeAttr(s){ return String(s).replace(/"/g,'&quot;'); }
+
+  // Wiring
+  document.addEventListener('DOMContentLoaded', ()=>{
+    loadState();
+    showAdminPass();
+    renderAll();
+
+    el('btnAdd').addEventListener('click', ()=>{
+      const name = el('newName').value.trim();
+      if(!name) return;
+      const type = el('typeSelect').value;
+      if(type === 'seed') addSeed(name); else addParticipant(name);
+      el('newName').value = '';
+    });
+
+    el('btnAutoAssign').addEventListener('click', autoAssignNumbers);
+    el('btnShuffleSeeds').addEventListener('click', shuffleSeeds);
+
+    el('btnSpin').addEventListener('click', ()=>{
+      const pid = el('selectParticipant').value;
+      if(!pid) return alert('Chọn người để quay');
+      spinAnimateForPid(pid, ()=>{});
+    });
+    el('btnSpinAll').addEventListener('click', ()=>spinAllSequential());
+
+    el('btnCreateGroups').addEventListener('click', createGroups);
+    el('btnAssignGroups').addEventListener('click', ()=>{ assignPriorityBySeed(); });
+    el('btnSpinAssignGroup').addEventListener('click', spinAssignGroups);
+    el('btnGenerateRR').addEventListener('click', generateRoundRobin);
+    el('btnRecalc').addEventListener('click', updateStandingsFromMatches);
+    el('btnExport').addEventListener('click', exportCSV);
+
+    el('btnAssignSelected').addEventListener('click', ()=>{
+      if(!selectedPairId) return alert('Hãy chọn 1 cặp ở danh sách bên trái trước');
+      assignPairToGroup(selectedPairId);
+    });
+    el('btnSpinSelected').addEventListener('click', ()=>{
+      if(!selectedPairId) return alert('Hãy chọn 1 cặp ở danh sách bên trái trước');
+      spinPair(selectedPairId);
+    });
+
+    el('btnReset').addEventListener('click', ()=>{
+      const pwd = el('resetPwdInput').value;
+      resetAllWithPwd(pwd);
+    });
+
+    el('btnChangePass').addEventListener('click', changePassword);
+
+    // Delegated actions
+    document.body.addEventListener('click', (e)=>{
+      const t = e.target;
+      if(t.classList.contains('pairLabel')){
+        const id = t.dataset.id;
+        if(selectedPairId === id) selectedPairId = null; else selectedPairId = id;
+        renderAll();
+        return;
+      }
+      if(t.classList.contains('btnRemoveSeed')){ const id=t.dataset.id; state.seeds = state.seeds.filter(s=>s.id!==id); saveState(); renderAll(); }
+      if(t.classList.contains('btnEditSeed')){ const id=t.dataset.id; const s = state.seeds.find(x=>x.id===id); if(!s) return; const nv = prompt('Sửa tên seed', s.name); if(nv){ s.name = nv; saveState(); renderAll(); } }
+      if(t.classList.contains('btnRemoveP')){ const id=t.dataset.id; state.participants = state.participants.filter(s=>s.id!==id); for(const n in state.assignedNumbers) if(state.assignedNumbers[n]===id) delete state.assignedNumbers[n]; saveState(); renderAll(); }
+      if(t.classList.contains('btnEditP')){ const id=t.dataset.id; const p = state.participants.find(x=>x.id===id); if(!p) return; const nv = prompt('Sửa tên người', p.name); if(nv){ p.name = nv; saveState(); renderAll(); } }
+      if(t.classList.contains('btnAssignGroupInline')) assignPairToGroup(t.dataset.id);
+      if(t.classList.contains('btnSpinPairInline')) spinPair(t.dataset.id);
+      if(t.classList.contains('btnRemovePair')) removePair(t.dataset.id);
+    });
+
+    el('newName').addEventListener('keydown', (ev)=>{ if(ev.key === 'Enter'){ ev.preventDefault(); el('btnAdd').click(); } });
+
+    const mo = new MutationObserver(()=>{ attachMatchInputListeners(); });
+    mo.observe(el('groupsArea'), {childList:true, subtree:true});
+  });
+
+})(); // end closure
+</script>
+</body>
+</html>
